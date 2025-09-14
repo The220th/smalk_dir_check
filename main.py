@@ -1,6 +1,6 @@
 # coding: utf-8
 
-# V0.0.1
+# V0.0.2
 
 import traceback
 import time
@@ -14,7 +14,8 @@ from alerk_pack.crypto import str_to_asym_key
 # ==================================== config section ====================================
 
 class Settings:
-    sleep_before_check = 30  # How long to wait between
+    sleep_before_check = 5  # How long to wait between
+    startup_message = "tidir up"  # message to alerk if this smalk turned on. Leave empty ("") if no need this hello message
     dirs = {
         "/path/to/dir1":
             {
@@ -76,10 +77,12 @@ def check_dir(dir_path: str, dir_data_dict: dict) -> bool:
         dir_data_dict["prev_hash"] = _hash
         return True
     else:
+        prev_hash = dir_data_dict["prev_hash"]
+        dir_data_dict["prev_hash"] = _hash
         if dir_data_dict["report_if_changed"]:
-            return dir_data_dict["prev_hash"] == _hash
+            return prev_hash == _hash
         else:
-            return dir_data_dict["prev_hash"] != _hash
+            return prev_hash != _hash
 
 
 def report_to_alerk(dir_data: dict):
@@ -114,6 +117,8 @@ def main():
                  alerk_verify_key=str_to_asym_key(Settings.alerk_verify_key, True),
                  sym_key=None)
     Kommunicator().start()
+    if Settings.startup_message != "":
+        Kommunicator().add_msg(MessageWrapper(MessageWrapper.MSG_TYPE_REPORT, Settings.startup_message, False))
     try:
         process()
     except Exception as e:
