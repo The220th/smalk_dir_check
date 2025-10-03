@@ -1,24 +1,30 @@
 # coding: utf-8
 
-# V0.0.2
+# V0.1.0
 
 import traceback
 import time
 import datetime
 import os
+from pathlib import Path
 from ksupk import get_files_list, calc_hash_of_file, calc_hash_of_str
 from alerk_pack.message import MessageWrapper
-from alerk_pack.communicator import Kommunicator
-from alerk_pack.crypto import str_to_asym_key
+from alerk_pack.communicator import Kommunicator, convert_strs_to_keys
 
 # ==================================== config section ====================================
 
+
+def get_dir() -> str:
+    return "/path/to/dir2"
+
+
 class Settings:
     sleep_before_check = 5  # How long to wait between
-    startup_message = "tidir up"  # message to alerk if this smalk turned on. Leave empty ("") if no need this hello message
+    startup_message = "smalk_dir_check up"  # message to alerk if this smalk turned on. Leave empty ("") if no need this hello message
     dirs = {
-        "/path/to/dir1":
+        "dir1":
             {
+                "path": "/path/to/dir1",  # path to interested directory or callable
                 "refresh_rate": 600,  # How often to check (seconds)
                 "report_if_changed" : True,  #  Report if directory has changed. If set to False, then vice versa -- report if directory has not changed
                 "message_for_alerk": "dir1 changed! ",  # Will show in message for alerk
@@ -28,9 +34,10 @@ class Settings:
                 "prev_hash": None,  # Do not edit it. Leave None here
                 "last_check_time": None,  # Do not edit it. Leave None here
             },
-        "/path/to/dir2":
+        "dir2":
             {
-              "...": "copy from one above",
+                "path": get_dir,  # path to interested directory or callable
+                "...": "copy from one above",
             },
     }
 
@@ -45,6 +52,7 @@ class Settings:
     alerk_verify_key = ""
 
 # ==================================== config section ====================================
+
 
 def get_cur_time():
     template = "%Y.%m.%d %H:%M:%S"
@@ -91,6 +99,17 @@ def report_to_alerk(dir_data: dict):
     Kommunicator().add_msg(mw)
 
 
+def unpack_path(path) -> str:
+    if isinstance(path, str):
+        return path
+    elif isinstance(path, Path):
+        return str(path)
+    elif callable(path):
+        return path()
+    else:
+        raise TypeError("(unpack_path) path must be path str or callable")
+
+
 def process():
     while True:
         time.sleep(Settings.sleep_before_check)
@@ -98,24 +117,28 @@ def process():
         dirs = Settings.dirs
         for dir_i in dirs:
             dir_data = dirs[dir_i]
+            dir_path = dir_data["path"]
+            dir_path = unpack_path(dir_path)
             refresh_rate = dir_data["refresh_rate"]
             last_check_time = dir_data["last_check_time"]
             if last_check_time is None or cur_time - last_check_time >= refresh_rate:
-                need_report = not check_dir(dir_i, dir_data)
+                need_report = not check_dir(dir_path, dir_data)
                 if need_report:
                     report_to_alerk(dir_data)
                 dir_data["last_check_time"] = time.time()
 
 
 def main():
+    keys = convert_strs_to_keys(Settings.priv_key, Settings.pub_key, Settings.sign_key, Settings.verif_key,
+                                Settings.alerk_pub_key, Settings.alerk_verify_key, None)
     Kommunicator(url=Settings.alerk_url,
-                 priv_key=str_to_asym_key(Settings.priv_key, False),
-                 public_key=str_to_asym_key(Settings.pub_key, True),
-                 sign_key=str_to_asym_key(Settings.sign_key, False),
-                 verify_key=str_to_asym_key(Settings.verif_key, True),
-                 alerk_pub_key=str_to_asym_key(Settings.alerk_pub_key, True),
-                 alerk_verify_key=str_to_asym_key(Settings.alerk_verify_key, True),
-                 sym_key=None)
+                 priv_key=keys[0],
+                 public_key=keys[1],
+                 sign_key=keys[2],
+                 verify_key=keys[3],
+                 alerk_pub_key=keys[4],
+                 alerk_verify_key=keys[5],
+                 sym_key=keys[6])
     Kommunicator().start()
     if Settings.startup_message != "":
         Kommunicator().add_msg(MessageWrapper(MessageWrapper.MSG_TYPE_REPORT, Settings.startup_message, False))
